@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>R2 Backup Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #7f8c8d;
+        }
+
+        .actions {
+            margin-bottom: 20px;
+        }
+
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+
+        button:hover {
+            background: #2980b9;
+        }
+
+        button.danger {
+            background: #e74c3c;
+        }
+
+        button.danger:hover {
+            background: #c0392b;
+        }
+
+        button.success {
+            background: #27ae60;
+        }
+
+        button.success:hover {
+            background: #229954;
+        }
+
+        .jobs-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .job-card {
+            border: 1px solid #e0e0e0;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            background: #fafafa;
+        }
+
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .job-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .job-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .job-status.enabled {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .job-status.disabled {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .job-details {
+            color: #555;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .job-details div {
+            margin-bottom: 5px;
+        }
+
+        .job-actions button {
+            font-size: 12px;
+            padding: 6px 12px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🗄️ R2 Backup Manager</h1>
+            <p class="subtitle">Manage your Cloudflare R2 backup jobs</p>
+        </header>
+
+        <div class="actions">
+            <button onclick="showCreateModal()">+ Create New Job</button>
+            <button onclick="loadJobs()">🔄 Refresh</button>
+        </div>
+
+        <div id="error-message" class="error" style="display: none;"></div>
+
+        <div class="jobs-container">
+            <h2>Backup Jobs</h2>
+            <div id="jobs-list" class="loading">Loading jobs...</div>
+        </div>
+    </div>
+
+    <!-- Create Job Modal -->
+    <div id="create-modal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Backup Job</h2>
+            <form id="create-form" onsubmit="createJob(event)">
+                <div class="form-group">
+                    <label>Job Name*</label>
+                    <input type="text" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label>Source Path*</label>
+                    <input type="text" name="source" required placeholder="./data">
+                </div>
+                <div class="form-group">
+                    <label>Bucket Name*</label>
+                    <input type="text" name="bucket" required placeholder="my-bucket">
+                </div>
+                <div class="form-group">
+                    <label>Prefix</label>
+                    <input type="text" name="prefix" placeholder="backups/">
+                </div>
+                <div class="form-group">
+                    <label>Schedule (cron)*</label>
+                    <input type="text" name="schedule" required placeholder="0 3 * * *" value="0 3 * * *">
+                </div>
+                <div class="form-group">
+                    <label>Enabled</label>
+                    <select name="enabled">
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit">Create Job</button>
+                    <button type="button" onclick="hideCreateModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+
+        async function loadJobs() {
+            const jobsList = document.getElementById('jobs-list');
+            jobsList.innerHTML = '<div class="loading">Loading jobs...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/jobs?includeDisabled=true`);
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error?.message || 'Failed to load jobs');
+                }
+
+                const jobs = result.data;
+
+                if (jobs.length === 0) {
+                    jobsList.innerHTML = '<div class="empty-state">No backup jobs yet. Create one to get started!</div>';
+                    return;
+                }
+
+                jobsList.innerHTML = jobs.map(job => `
+                    <div class="job-card">
+                        <div class="job-header">
+                            <div class="job-name">${escapeHtml(job.name)}</div>
+                            <div class="job-status ${job.enabled ? 'enabled' : 'disabled'}">
+                                ${job.enabled ? 'ENABLED' : 'DISABLED'}
+                            </div>
+                        </div>
+                        <div class="job-details">
+                            <div><strong>Source:</strong> ${escapeHtml(job.source)}</div>
+                            <div><strong>Destination:</strong> ${escapeHtml(job.bucket)}/${escapeHtml(job.prefix)}</div>
+                            <div><strong>Schedule:</strong> ${escapeHtml(job.schedule)}</div>
+                        </div>
+                        <div class="job-actions">
+                            <button class="success" onclick="runBackup('${escapeHtml(job.name)}')">▶️ Run Now</button>
+                            <button onclick="viewHistory('${escapeHtml(job.name)}')">📊 History</button>
+                            <button class="danger" onclick="deleteJob('${escapeHtml(job.name)}')">🗑️ Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                showError(error.message);
+                jobsList.innerHTML = '<div class="error">Failed to load jobs</div>';
+            }
+        }
+
+        function showCreateModal() {
+            document.getElementById('create-modal').classList.add('active');
+        }
+
+        function hideCreateModal() {
+            document.getElementById('create-modal').classList.remove('active');
+            document.getElementById('create-form').reset();
+        }
+
+        async function createJob(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+
+            const data = {
+                name: formData.get('name'),
+                source: formData.get('source'),
+                bucket: formData.get('bucket'),
+                prefix: formData.get('prefix') || '',
+                schedule: formData.get('schedule'),
+                enabled: formData.get('enabled') === 'true',
+                exclude: []
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/jobs`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error?.message || 'Failed to create job');
+                }
+
+                hideCreateModal();
+                loadJobs();
+                showSuccess('Job created successfully!');
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function runBackup(name) {
+            if (!confirm(`Run backup job "${name}" now?`)) return;
+
+            try {
+                showSuccess(`Running backup "${name}"...`);
+                const response = await fetch(`${API_BASE}/jobs/${encodeURIComponent(name)}/run`, {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error?.message || 'Failed to run backup');
+                }
+
+                const data = result.data;
+                showSuccess(`Backup completed! Uploaded: ${data.uploadedFiles}, Skipped: ${data.skippedFiles}, Errors: ${data.errors.length}`);
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function deleteJob(name) {
+            if (!confirm(`Delete job "${name}"? This action cannot be undone.`)) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/jobs/${encodeURIComponent(name)}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error?.message || 'Failed to delete job');
+                }
+
+                loadJobs();
+                showSuccess('Job deleted successfully!');
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function viewHistory(name) {
+            alert(`History view for "${name}" - Coming soon!`);
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = '❌ ' + message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.style.background = '#d4edda';
+            errorDiv.style.color = '#155724';
+            errorDiv.textContent = '✅ ' + message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+                errorDiv.style.background = '#f8d7da';
+                errorDiv.style.color = '#721c24';
+            }, 5000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Load jobs on page load
+        loadJobs();
+    </script>
+</body>
+</html>

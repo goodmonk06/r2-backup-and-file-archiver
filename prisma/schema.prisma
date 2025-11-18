@@ -1,0 +1,54 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model BackupJob {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  source      String
+  bucket      String
+  prefix      String
+  schedule    String
+  exclude     String[] @default([])
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  histories   BackupHistory[]
+
+  @@index([name])
+  @@index([enabled])
+}
+
+model BackupHistory {
+  id            String   @id @default(cuid())
+  jobId         String
+  jobName       String
+  totalFiles    Int
+  uploadedFiles Int
+  skippedFiles  Int
+  errors        String[] @default([])
+  startTime     DateTime
+  endTime       DateTime
+  duration      Int      // in milliseconds
+  status        String   // 'success', 'partial', 'failed'
+  createdAt     DateTime @default(now())
+
+  job           BackupJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([jobName])
+  @@index([status])
+  @@index([createdAt])
+}

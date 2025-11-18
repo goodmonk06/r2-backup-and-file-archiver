@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: r2backup-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: r2backup
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: r2backup-app
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/r2backup?schema=public
+      PORT: 3000
+      # R2 credentials - override these with .env file
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-your-account-id}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-your-access-key}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-your-secret-key}
+      R2_ENDPOINT: ${R2_ENDPOINT:-https://account-id.r2.cloudflarestorage.com}
+      BACKUP_CONFIG_PATH: ./config/backup.yml
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Mount local config and data directories
+      - ./config:/app/config
+      - ./data:/app/data
+      - backup_cache:/app/.backup-cache
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  backup_cache:

@@ -14,41 +14,191 @@ datasource db {
 }
 
 model BackupJob {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  source      String
-  bucket      String
-  prefix      String
-  schedule    String
-  exclude     String[] @default([])
-  enabled     Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default(cuid())
+  name              String   @unique
+  description       String?
+  source            String
+  bucket            String
+  prefix            String
+  schedule          String
+  exclude           String[] @default([])
+  enabled           Boolean  @default(true)
+  priority          Int      @default(5) // 1-10, higher = more important
+  retryAttempts     Int      @default(3)
+  retryDelayMs      Int      @default(60000) // 1 minute
+  templateId        String?
+  retentionPolicyId String?
+  tags              String[] @default([])
+  metadata          Json?    // flexible field for custom data
+  deletedAt         DateTime? // soft delete
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  histories   BackupHistory[]
+  template          BackupTemplate? @relation(fields: [templateId], references: [id])
+  retentionPolicy   RetentionPolicy? @relation(fields: [retentionPolicyId], references: [id])
+  histories         BackupHistory[]
+  notifications     BackupNotification[]
 
   @@index([name])
   @@index([enabled])
+  @@index([templateId])
+  @@index([retentionPolicyId])
+  @@index([priority])
+  @@index([deletedAt])
 }
 
 model BackupHistory {
-  id            String   @id @default(cuid())
-  jobId         String
-  jobName       String
-  totalFiles    Int
-  uploadedFiles Int
-  skippedFiles  Int
-  errors        String[] @default([])
-  startTime     DateTime
-  endTime       DateTime
-  duration      Int      // in milliseconds
-  status        String   // 'success', 'partial', 'failed'
-  createdAt     DateTime @default(now())
+  id                String   @id @default(cuid())
+  jobId             String
+  jobName           String
+  totalFiles        Int
+  uploadedFiles     Int
+  skippedFiles      Int
+  totalBytes        BigInt   @default(0)
+  uploadedBytes     BigInt   @default(0)
+  errors            String[] @default([])
+  warnings          String[] @default([])
+  startTime         DateTime
+  endTime           DateTime
+  duration          Int      // in milliseconds
+  status            String   // 'success', 'partial', 'failed', 'cancelled'
+  verificationStatus String? // 'pending', 'verified', 'failed'
+  checksums         Json?    // file checksums for verification
+  triggeredBy       String   @default("scheduled") // 'scheduled', 'manual', 'api', 'webhook'
+  retryCount        Int      @default(0)
+  metadata          Json?
+  createdAt         DateTime @default(now())
 
-  job           BackupJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job               BackupJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@index([jobId])
   @@index([jobName])
   @@index([status])
   @@index([createdAt])
+  @@index([triggeredBy])
+}
+
+model BackupTemplate {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  source      String   // can contain variables like ${PROJECT_NAME}
+  bucket      String
+  prefix      String
+  schedule    String
+  exclude     String[] @default([])
+  priority    Int      @default(5)
+  retryAttempts Int    @default(3)
+  retryDelayMs  Int    @default(60000)
+  tags        String[] @default([])
+  variables   Json?    // list of variables that need to be filled
+  metadata    Json?
+  isPublic    Boolean  @default(false) // can be used by others
+  createdBy   String?  // user ID if multi-tenant
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  jobs        BackupJob[]
+
+  @@index([name])
+  @@index([isPublic])
+  @@index([createdBy])
+}
+
+model RetentionPolicy {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  description       String?
+  retentionDays     Int?     // keep backups for N days
+  retentionCount    Int?     // keep last N backups
+  deleteAfterDays   Int?     // hard delete after N days
+  archiveAfterDays  Int?     // move to archive tier after N days
+  enabled           Boolean  @default(true)
+  lastExecutedAt    DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  jobs              BackupJob[]
+  executions        RetentionExecution[]
+
+  @@index([name])
+  @@index([enabled])
+}
+
+model RetentionExecution {
+  id              String   @id @default(cuid())
+  policyId        String
+  deletedCount    Int      @default(0)
+  archivedCount   Int      @default(0)
+  freedBytes      BigInt   @default(0)
+  status          String   // 'success', 'partial', 'failed'
+  errors          String[] @default([])
+  executedAt      DateTime @default(now())
+
+  policy          RetentionPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId])
+  @@index([executedAt])
+}
+
+model BackupNotification {
+  id              String   @id @default(cuid())
+  jobId           String?  // null = global notification
+  name            String
+  type            String   // 'email', 'webhook', 'slack', 'discord', 'custom'
+  enabled         Boolean  @default(true)
+  triggerOn       String[] @default([]) // ['success', 'failure', 'warning']
+  config          Json     // channel-specific config (email address, webhook URL, etc)
+  lastTriggeredAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  job             BackupJob? @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  history         NotificationHistory[]
+
+  @@index([jobId])
+  @@index([type])
+  @@index([enabled])
+}
+
+model NotificationHistory {
+  id              String   @id @default(cuid())
+  notificationId  String
+  jobId           String?
+  event           String   // 'backup_success', 'backup_failed', etc
+  status          String   // 'sent', 'failed'
+  error           String?
+  sentAt          DateTime @default(now())
+
+  notification    BackupNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId])
+  @@index([jobId])
+  @@index([sentAt])
+}
+
+model BackupStats {
+  id                    String   @id @default(cuid())
+  date                  DateTime @unique
+  totalBackups          Int      @default(0)
+  successfulBackups     Int      @default(0)
+  failedBackups         Int      @default(0)
+  totalFilesUploaded    Int      @default(0)
+  totalBytesUploaded    BigInt   @default(0)
+  totalBytesStored      BigInt   @default(0)
+  averageDurationMs     Int      @default(0)
+  activeJobs            Int      @default(0)
+  createdAt             DateTime @default(now())
+
+  @@index([date])
+}
+
+model BackupTag {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  color       String?  // hex color for UI
+  createdAt   DateTime @default(now())
+
+  @@index([name])
 }

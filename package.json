@@ -1,0 +1,38 @@
+{
+  "name": "r2-backup-and-file-archiver",
+  "version": "0.1.0",
+  "description": "重要ファイルを定期的にCloudflare R2へバックアップするサービス",
+  "main": "dist/cli.js",
+  "bin": {
+    "r2-backup": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "backup": "tsx src/cli.ts run"
+  },
+  "keywords": [
+    "backup",
+    "r2",
+    "cloudflare",
+    "archiver",
+    "s3"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.10.0",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.470.0",
+    "commander": "^11.1.0",
+    "dotenv": "^16.3.1",
+    "js-yaml": "^4.1.0",
+    "node-cron": "^3.0.3"
+  }
+}

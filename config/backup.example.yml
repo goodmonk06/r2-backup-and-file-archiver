@@ -1,0 +1,41 @@
+# バックアップジョブ設定ファイル
+# このファイルをコピーして backup.yml として使用してください
+
+jobs:
+  # プロジェクトファイルのバックアップ
+  - name: project-backup
+    # バックアップ元のディレクトリ
+    source: ./data
+    # R2バケット名
+    bucket: my-bucket
+    # バケット内のプレフィックス（フォルダパス）
+    prefix: project/
+    # スケジュール（cron形式: 毎日午前3時）
+    schedule: "0 3 * * *"
+    # 除外パターン（オプション）
+    exclude:
+      - "*.tmp"
+      - "*.log"
+      - "node_modules/"
+    # 有効/無効
+    enabled: true
+
+  # ドキュメントのバックアップ
+  - name: documents-backup
+    source: ./documents
+    bucket: my-backup-bucket
+    prefix: docs/
+    schedule: "0 2 * * *"
+    exclude:
+      - ".DS_Store"
+      - "Thumbs.db"
+    enabled: true
+
+  # データベースダンプのバックアップ
+  - name: database-backup
+    source: ./backups/database
+    bucket: my-backup-bucket
+    prefix: database/
+    # 毎週日曜日午前4時
+    schedule: "0 4 * * 0"
+    enabled: false
